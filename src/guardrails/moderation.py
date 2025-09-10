@@ -9,7 +9,7 @@ def moderate_text(text: str) -> Tuple[bool, Any]:
     Fail-safe: if API errors, we treat as safe to avoid blocking demo runs.
     """
     try:
-        client = OpenAI(api_key='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')
+        client = OpenAI()
         resp = client.moderations.create(
             model="omni-moderation-latest",
             input=text,

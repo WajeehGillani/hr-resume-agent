@@ -9,3 +9,7 @@
 /data
 /logs
 /.env
+/.tokens
+google_client_secret.json
+credentials.json
+token.json

@@ -8,6 +8,9 @@ from src.state import OrchestratorState, JD, Candidate
 from src.guardrails.schemas import validate_state_transition, validate_final_output
 from src.tools.retriever import LocalQuestionBank, build_query_from_jd
 from src.observability import get_tracer
+from src.integrations.langsmith_integration import (
+    trace_candidate_scoring, trace_question_generation
+)
 
 TRACER = get_tracer()
 
@@ -29,11 +32,12 @@ def _overlap(required: Iterable[str], skills: Iterable[str]) -> float:
         return 0.0
     return len(R & S) / max(1, len(R))
 
+@trace_candidate_scoring
 def _score_candidate(jd: JD, c: Candidate) -> float:
     must = _overlap(jd.must_haves, c.skills)
     nice = _overlap(jd.nice_haves, c.skills) if jd.nice_haves else 0.0
     exp_bonus = min(max(c.years_exp, 0) / 10.0, 0.3)
-    return round(0.7 * must + 0.3 * nice + exp_bonus, 4)
+    return round(0.7 * must + 0.2 * nice + 0.1 * exp_bonus, 4)
 
 def _shortlist(jd: JD, candidates: List[Candidate], top_n: int, min_score: float) -> List[Candidate]:
     scored: List[Tuple[float, Candidate]] = []
@@ -75,7 +79,7 @@ def analyst(
     TRACER.log_node("Analyst", "start", candidates=len(state.candidates))
     shortlist = _shortlist(state.jd, state.candidates, top_n_first, min_score_first)
     if len(shortlist) < 3 and len(state.candidates) >= 3:
-        state.needs_disambiguination = True  # backwards typo tolerance
+        # state.needs_disambiguination = True  # backwards typo tolerance (removed)
         state.needs_disambiguation = True
         shortlist = _shortlist(state.jd, state.candidates, top_n_wide, min_score_first * widen_factor)
         if len(shortlist) < 3:
@@ -85,6 +89,7 @@ def analyst(
     TRACER.log_node("Analyst", "done", shortlisted=len(state.shortlisted), widened=bool(getattr(state, "needs_disambiguation", False)))
     return state
 
+@trace_question_generation
 def question_writer(
     state: OrchestratorState,
     *,

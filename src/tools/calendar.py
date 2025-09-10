@@ -56,7 +56,14 @@ def _write_ics(
     END:VCALENDAR
     """).strip()
 
-    out = ARTIFACTS / filename
+    # Handle both relative and absolute paths  
+    if os.path.isabs(filename):
+        out = Path(filename)
+    else:
+        out = ARTIFACTS / filename
+    
+    # Ensure parent directory exists
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(ics, encoding="utf-8")
     return str(out)
 
@@ -72,6 +79,7 @@ def create_event_or_fallback(
     duration_min: int = 30,
     location: Optional[str] = None,
     insert_fn: Optional[Callable[[Dict[str, Any]], Any]] = None,
+    ics_filename: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Try to insert calendar event using `insert_fn(payload)` if:
@@ -86,7 +94,7 @@ def create_event_or_fallback(
       - extra: optional info (e.g., error message)
     """
     start_utc = _ensure_dt_utc(when_dt)
-    ics_path = _write_ics(title, start_utc, duration_min, location)  # always produce ICS (visible demo)
+    ics_path = _write_ics(title, start_utc, duration_min, location, filename=(ics_filename or "invite.ics"))  # always produce ICS (visible demo)
 
     use_real = os.getenv("USE_REAL_CALENDAR") == "1"
     if not use_real or insert_fn is None:
