@@ -8,6 +8,13 @@ def moderate_text(text: str) -> Tuple[bool, Any]:
     Returns (is_safe, raw_response). Uses OpenAI 'omni-moderation-latest'.
     Fail-safe: if API errors, we treat as safe to avoid blocking demo runs.
     """
+    import os
+    
+    # Skip moderation if no valid API key
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or not api_key.strip() or api_key.startswith("your_"):
+        return (True, {"skipped": "No valid API key for moderation"})
+    
     try:
         client = OpenAI()
         resp = client.moderations.create(

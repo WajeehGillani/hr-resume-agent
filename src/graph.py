@@ -212,14 +212,16 @@ def main():
             if not has_email:
                 email_entry["info"] = "No email found in resume; To header omitted"
             emails.append(email_entry)
-            # Optional: Gmail draft
-            try:
-                subj, body = compose_email(c.name, state.jd.title, "next week", location=config.DEFAULT_LOCATION)
-                if c.email:
-                    d = create_gmail_draft(c.email, subj, body)
-                    drafts.append({"name": c.name, "email": c.email, "draft_id": d.get("id") or (d.get("draft") or {}).get("id")})
-            except Exception:
-                continue
+            # Optional: Gmail draft (if enabled and Google credentials are available)
+            if config.USE_GMAIL_DRAFTS:
+                try:
+                    subj, body = compose_email(c.name, state.jd.title, "next week", location=config.DEFAULT_LOCATION)
+                    if c.email:
+                        d = create_gmail_draft(c.email, subj, body)
+                        drafts.append({"name": c.name, "email": c.email, "draft_id": d.get("id") or (d.get("draft") or {}).get("id")})
+                except Exception:
+                    # Silently continue if Google credentials not available or Gmail fails
+                    continue
 
     start_iso = args.when
     if not start_iso:
@@ -239,40 +241,42 @@ def main():
         )
         # Update the path to organized location
         cal_res["ics_path"] = ics_path
-        # Optional: Google Calendar tentative event per candidate
+        # Optional: Google Calendar tentative event per candidate (only if enabled and configured)
+        if config.USE_REAL_CALENDAR:
+            try:
+                start_dt = datetime.fromisoformat(start_iso)
+                if start_dt.tzinfo is None:
+                    start_dt = start_dt.replace(tzinfo=timezone.utc)
+                end_dt = start_dt + timedelta(minutes=config.INTERVIEW_DURATION_MINUTES)
+                gcal = create_calendar_event(
+                    f"Interview: {state.jd.title} - {c.name}",
+                    start_dt.astimezone(timezone.utc).isoformat(),
+                    end_dt.astimezone(timezone.utc).isoformat(),
+                    location=config.DEFAULT_LOCATION,
+                )
+                cal_res["google_event_id"] = gcal.get("id")
+                cal_res["google_html_link"] = gcal.get("htmlLink")
+            except Exception:
+                pass
+        cal_multi.append({"name": c.name, **cal_res})
+
+    # Optional: create Google Calendar event (tentative) if OAuth configured and enabled
+    if config.USE_REAL_CALENDAR:
         try:
             start_dt = datetime.fromisoformat(start_iso)
             if start_dt.tzinfo is None:
                 start_dt = start_dt.replace(tzinfo=timezone.utc)
-            end_dt = start_dt + timedelta(minutes=config.INTERVIEW_DURATION_MINUTES)
+            end_dt = start_dt + timedelta(minutes=30)
             gcal = create_calendar_event(
-                f"Interview: {state.jd.title} - {c.name}",
+                f"Interview: {state.jd.title}",
                 start_dt.astimezone(timezone.utc).isoformat(),
                 end_dt.astimezone(timezone.utc).isoformat(),
-                location=config.DEFAULT_LOCATION,
+                location="Google Meet",
             )
             cal_res["google_event_id"] = gcal.get("id")
             cal_res["google_html_link"] = gcal.get("htmlLink")
         except Exception:
             pass
-        cal_multi.append({"name": c.name, **cal_res})
-
-    # Optional: create Google Calendar event (tentative) if OAuth configured
-    try:
-        start_dt = datetime.fromisoformat(start_iso)
-        if start_dt.tzinfo is None:
-            start_dt = start_dt.replace(tzinfo=timezone.utc)
-        end_dt = start_dt + timedelta(minutes=30)
-        gcal = create_calendar_event(
-            f"Interview: {state.jd.title}",
-            start_dt.astimezone(timezone.utc).isoformat(),
-            end_dt.astimezone(timezone.utc).isoformat(),
-            location="Google Meet",
-        )
-        cal_res["google_event_id"] = gcal.get("id")
-        cal_res["google_html_link"] = gcal.get("htmlLink")
-    except Exception:
-        pass
 
     # --- Metrics summary ---
     elapsed_s = round(perf_counter() - t0, 3)

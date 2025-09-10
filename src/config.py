@@ -20,7 +20,8 @@ class Config:
     GOOGLE_CLIENT_SECRET_FILE: Optional[str] = os.getenv("GOOGLE_CLIENT_SECRET_FILE")
     GOOGLE_CREDENTIALS_FILE: Optional[str] = os.getenv("GOOGLE_CREDENTIALS_FILE")
     GOOGLE_TOKEN_FILE: Optional[str] = os.getenv("GOOGLE_TOKEN_FILE")
-    USE_REAL_CALENDAR: bool = os.getenv("USE_REAL_CALENDAR", "0") == "1"
+    USE_REAL_CALENDAR: bool = os.getenv("USE_REAL_CALENDAR", "1") == "1"
+    USE_GMAIL_DRAFTS: bool = os.getenv("USE_GMAIL_DRAFTS", "1") == "1"
     
     # Company Information
     COMPANY_NAME: str = os.getenv("COMPANY_NAME", "Wajeeh ul Hassan")

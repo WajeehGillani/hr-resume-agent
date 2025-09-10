@@ -105,6 +105,13 @@ def question_writer(
     retrieved = kb.search(query, top_k=top_k_retrieve)
 
     try:
+        # Check if OpenAI API is available
+        import os
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key or not api_key.strip() or api_key.startswith("your_"):
+            # Skip to fallback if no valid API key
+            raise Exception("No valid OpenAI API key - using fallback questions")
+        
         client = OpenAI()
         sys = (
             "You are an expert interviewer. Rewrite the provided questions so they are:\n"

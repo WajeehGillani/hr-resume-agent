@@ -14,7 +14,7 @@ from src.config import config
 class ArtifactsManager:
     """Manages organized storage and cleanup of generated artifacts."""
     
-    def __init__(self, job_title: str = None, run_id: str = None):
+    def __init__(self, job_title: str = None, run_id: str = None, create_dirs: bool = True):
         self.base_dir = config.ARTIFACTS_DIR
         self.run_id = run_id or datetime.now().strftime("%Y%m%d_%H%M%S")
         self.job_title = self._sanitize_filename(job_title or "interview")
@@ -30,7 +30,9 @@ class ArtifactsManager:
         self.cache_dir = self.base_dir / "cache"
         self.templates_dir = self.base_dir / "templates"
         
-        self._setup_directories()
+        # Only create directories if explicitly requested (for actual runs)
+        if create_dirs:
+            self._setup_directories()
     
     def _sanitize_filename(self, name: str) -> str:
         """Convert job title to safe filename."""
@@ -54,6 +56,17 @@ class ArtifactsManager:
         ]
         
         for directory in directories:
+            directory.mkdir(parents=True, exist_ok=True)
+    
+    def ensure_base_directories(self):
+        """Ensure only base directories exist (for cleanup operations)."""
+        base_directories = [
+            self.cache_dir,
+            self.templates_dir,
+            self.base_dir / "runs"
+        ]
+        
+        for directory in base_directories:
             directory.mkdir(parents=True, exist_ok=True)
     
     def get_email_path(self, candidate_name: str, index: int) -> str:
@@ -174,6 +187,64 @@ class ArtifactsManager:
                 except Exception as e:
                     print(f"Warning: Could not remove {file_path}: {e}")
     
+    def fix_duplicate_structures(self):
+        """Fix duplicate directory structures in artifacts."""
+        print("🔧 Fixing duplicate directory structures...")
+        
+        # Fix artifacts/artifacts duplication
+        duplicate_artifacts = self.base_dir / "artifacts"
+        if duplicate_artifacts.exists():
+            # Move contents up one level
+            for item in duplicate_artifacts.iterdir():
+                target = self.base_dir / item.name
+                if not target.exists():
+                    try:
+                        shutil.move(str(item), str(target))
+                        print(f"Moved {item.name} from duplicate artifacts/")
+                    except Exception as e:
+                        print(f"Warning: Could not move {item.name}: {e}")
+            
+            # Remove empty duplicate directory
+            try:
+                shutil.rmtree(duplicate_artifacts)
+                print("Removed duplicate artifacts/ directory")
+            except Exception as e:
+                print(f"Warning: Could not remove duplicate artifacts/: {e}")
+        
+        # Fix duplicate faiss_qbank (keep the one in cache)
+        root_faiss = self.base_dir / "faiss_qbank"
+        cache_faiss = self.cache_dir / "faiss_qbank"
+        
+        if root_faiss.exists() and cache_faiss.exists():
+            # Compare timestamps to keep the newer one
+            root_time = root_faiss.stat().st_mtime
+            cache_time = cache_faiss.stat().st_mtime
+            
+            if root_time > cache_time:
+                # Root is newer, move it to cache
+                try:
+                    shutil.rmtree(cache_faiss)
+                    shutil.move(str(root_faiss), str(cache_faiss))
+                    print("Updated faiss_qbank in cache with newer version")
+                except Exception as e:
+                    print(f"Warning: Could not update faiss_qbank: {e}")
+            else:
+                # Cache is newer or same, remove root duplicate
+                try:
+                    shutil.rmtree(root_faiss)
+                    print("Removed duplicate faiss_qbank from root")
+                except Exception as e:
+                    print(f"Warning: Could not remove root faiss_qbank: {e}")
+        
+        # Remove empty runs directories
+        for runs_dir in [self.base_dir / "runs"]:
+            if runs_dir.exists() and not any(runs_dir.iterdir()):
+                try:
+                    runs_dir.rmdir()
+                    print(f"Removed empty directory: {runs_dir.name}")
+                except Exception as e:
+                    print(f"Warning: Could not remove empty {runs_dir.name}: {e}")
+    
     def generate_artifacts_index(self) -> str:
         """Generate an index of all runs and artifacts."""
         runs_dir = self.base_dir / "runs"
@@ -228,7 +299,14 @@ class CleanupUtility:
         """Perform comprehensive cleanup of artifacts directory."""
         print("🧹 Starting artifacts cleanup...")
         
-        manager = ArtifactsManager()
+        # Create manager without creating new run directories
+        manager = ArtifactsManager(create_dirs=False)
+        
+        # Ensure base directories exist for cleanup operations
+        manager.ensure_base_directories()
+        
+        # Fix duplicate structures first
+        manager.fix_duplicate_structures()
         
         # Move cache files to organized location
         if keep_cache:
@@ -260,6 +338,10 @@ class CleanupUtility:
         run_dirs = sorted([d for d in runs_dir.iterdir() if d.is_dir()], 
                          key=lambda x: x.stat().st_mtime, reverse=True)
         
+        if not run_dirs:
+            print("📋 No runs found in artifacts/runs/")
+            return
+            
         print(f"📋 Recent runs (showing {min(limit, len(run_dirs))}):")
         print("-" * 80)
         
@@ -278,9 +360,13 @@ class CleanupUtility:
                     print(f"{i:2d}. {job_title} | {timestamp[:19]} | {candidates} candidates | {scheduled} scheduled")
                     print(f"    📁 {run_dir}")
                 except Exception:
-                    print(f"{i:2d}. {run_dir.name} | {datetime.fromtimestamp(run_dir.stat().st_mtime)}")
+                    mod_time = datetime.fromtimestamp(run_dir.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+                    print(f"{i:2d}. {run_dir.name} | {mod_time} | No summary")
+                    print(f"    📁 {run_dir}")
             else:
-                print(f"{i:2d}. {run_dir.name} | {datetime.fromtimestamp(run_dir.stat().st_mtime)}")
+                mod_time = datetime.fromtimestamp(run_dir.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+                print(f"{i:2d}. {run_dir.name} | {mod_time} | No summary")
+                print(f"    📁 {run_dir}")
         
         if len(run_dirs) > limit:
             print(f"... and {len(run_dirs) - limit} more runs")

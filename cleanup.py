@@ -51,6 +51,12 @@ Examples:
         help="Show what would be cleaned without actually doing it"
     )
     
+    parser.add_argument(
+        "--fix-duplicates", 
+        action="store_true",
+        help="Only fix duplicate structures without other cleanup"
+    )
+    
     args = parser.parse_args()
     
     if args.list_runs:
@@ -61,6 +67,15 @@ Examples:
         print("🔍 DRY RUN MODE - No files will be deleted")
         print(f"Would keep {args.keep_runs} latest runs")
         print(f"Artifacts directory: {config.ARTIFACTS_DIR}")
+        return
+    
+    if args.fix_duplicates:
+        print("🔧 FIXING DUPLICATE STRUCTURES ONLY")
+        from src.file_manager import ArtifactsManager
+        manager = ArtifactsManager(create_dirs=False)
+        manager.ensure_base_directories()
+        manager.fix_duplicate_structures()
+        print("✅ Duplicate structures fixed!")
         return
     
     if args.aggressive:

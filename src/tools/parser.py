@@ -58,8 +58,12 @@ class OpenAIError(RuntimeError): ...
 def _client() -> OpenAI | None:
     # Return client only if API key available; else None for offline fallback
     api_key = os.getenv("OPENAI_API_KEY")
-    if api_key:
-        return OpenAI()  # Reads OPENAI_API_KEY from environment automatically
+    if api_key and api_key.strip() and not api_key.startswith("your_"):
+        try:
+            return OpenAI()  # Reads OPENAI_API_KEY from environment automatically
+        except Exception:
+            # If client creation fails (invalid key, etc.), return None for fallback
+            return None
     return None
 
 @retry(
